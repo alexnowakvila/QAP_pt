@@ -26,7 +26,7 @@ from torch import optim
 import torch.nn.functional as F
 
 class Generator(TSP):
-    def __init__(self, path_dataset, path_tsp):
+    def __init__(self, path_dataset, path_tsp, mode='EUC_2D'):
         super().__init__(path_tsp)
         # TSP.__init__(self, path_dataset)
         self.path_dataset = path_dataset
@@ -36,6 +36,7 @@ class Generator(TSP):
         self.data_test = []
         self.N = 20
         self.J = 3
+        self.mode = mode
 
     def ErdosRenyi(self, p, N):
         W = np.zeros((N, N))
@@ -88,15 +89,20 @@ class Generator(TSP):
 
     def compute_example(self):
         example = {}
-        cities = self.cities_generator(self.N)
-        W = self.adj_from_coord(cities)
-        C = self.cycle_adj(self.N)
-        WW, x = self.compute_operators(W)
-        WC, x_c = self.compute_operators(C)
-        example['WW'], example['x'] = WW, x
-        example['WC'], example['x_c'] = WC, x_c
-        # compute hamiltonian cycle
-        self.save_solverformat(cities, self.N, mode='EUC_2D')
+        if mode == 'EUC_2D':
+            cities = self.cities_generator(self.N)
+            W = self.adj_from_coord(cities)
+            C = self.cycle_adj(self.N)
+            WW, x = self.compute_operators(W)
+            WC, x_c = self.compute_operators(C)
+            example['WW'], example['x'] = WW, x
+            example['WC'], example['x_c'] = WC, x_c
+            # compute hamiltonian cycle
+            self.save_solverformat(cities, self.N, mode='EUC_2D')
+        elif mode == 'FULL_MATRIX':
+            raise ValueError('Mode {} not supported.'.format(mode))
+        else:
+            raise ValueError('Mode {} not supported.'.format(mode))
         self.tsp_solver(self.N)
         # print(cities)
         ham_cycle, length_cycle = self.extract_path(0)
@@ -181,7 +187,7 @@ class Generator(TSP):
 
 if __name__ == '__main__':
     # Test Generator module
-    N = 40
+    N = 50
     path_dataset = '/data/anowak/TSP/'
     path_tsp = '/home/anowak/QAP_pt/src/tsp/LKH/'
     gen = Generator(path_dataset, path_tsp)

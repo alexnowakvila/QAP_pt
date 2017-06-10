@@ -1,28 +1,28 @@
-NAME : pr20.tsp.358845.tour
-COMMENT : Length = 358845
-COMMENT : Found by LKH [Keld Helsgaun] Sat Jun 10 01:45:52 2017
+NAME : pr20.tsp.383008.tour
+COMMENT : Length = 383008
+COMMENT : Found by LKH [Keld Helsgaun] Sat Jun 10 02:09:35 2017
 TYPE : TOUR
 DIMENSION : 20
 TOUR_SECTION
 1
-4
-2
+16
+10
+20
+5
+13
 3
-6
 15
-11
-8
+19
+4
 14
 9
 17
-20
-16
-5
-7
-19
-13
+2
 12
+11
+8
+6
+7
 18
-10
 -1
 EOF
