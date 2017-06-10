@@ -1,0 +1,28 @@
+NAME : pr20.tsp.358845.tour
+COMMENT : Length = 358845
+COMMENT : Found by LKH [Keld Helsgaun] Sat Jun 10 01:45:52 2017
+TYPE : TOUR
+DIMENSION : 20
+TOUR_SECTION
+1
+4
+2
+3
+6
+15
+11
+8
+14
+9
+17
+20
+16
+5
+7
+19
+13
+12
+18
+10
+-1
+EOF
