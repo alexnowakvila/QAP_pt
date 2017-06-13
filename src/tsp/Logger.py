@@ -131,7 +131,7 @@ if __name__ == '__main__':
     pred = sample[1][0]
     perm = sample[1][1]
     optimal_costs = sample[2]
-    costs = utils.compute_hamcycle(pred, W)
+    costs, = utils.compute_hamcycle(pred, W)
     print('W', W)
     print('oracle perm', perm)
     print('costs', costs[0])
