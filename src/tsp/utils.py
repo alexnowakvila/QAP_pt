@@ -46,8 +46,10 @@ def compute_accuracy(pred, labels):
 
 def compute_mean_cost(pred, W):
     # cost estimator for training time
+    pred = F.softmax(pred)
     mean_rowcost = torch.mul(pred, W).mean(2).squeeze(2)
-    return mean_rowcost.mean(1).mean(0).squeeze()
+    mean_pathcost = mean_rowcost.sum(1)
+    return mean_pathcost.mean(0).squeeze().data.cpu().numpy()
 
 def compute_recovery_rate(pred, labels):
     pred = pred.max(2)[1]
@@ -57,7 +59,7 @@ def compute_recovery_rate(pred, labels):
     accuracy = accuracy.mean(0).squeeze()
     return accuracy.data.cpu().numpy()[0]
 
-def compute_hamcycle(pred, W):
+def greedy_hamcycle(pred, W):
     def next_vertex(start, prev, pred):
         nxt = pred[start].data.cpu().numpy()
         col = int(nxt[0] == prev)
@@ -92,7 +94,7 @@ def compute_cost_path(Paths, W):
     # Paths is a list of length N+1
     batch_size = W.size(0)
     N = W.size(-1)
-    Costs = []
+    Costs = torch.zeros(batch_size)
     for b in range(batch_size):
         path = Paths[b].squeeze(0)
         Wb = W[b].squeeze(0)
@@ -102,7 +104,7 @@ def compute_cost_path(Paths, W):
             end = path[node + 1]
             cost += Wb[start, end]
         cost += Wb[end, 0]
-        Costs.append(cost)
+        Costs[b] = cost
     return Costs
 
 def beamsearch_hamcycle(pred, W, beam_size=2):

@@ -4,6 +4,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+matplotlib.rcParams.update({'font.size': 22})
 from data_generator import Generator
 import utils
 
@@ -36,6 +37,11 @@ class Logger(object):
         self.loss_test = []
         self.accuracy_train = []
         self.accuracy_test = []
+        self.accuracy_test_aux = []
+        self.cost_train = []
+        self.cost_test = []
+        self.cost_test_aux = []
+        self.path_examples = None
         self.args = None
 
     def write_settings(self, args):
@@ -47,6 +53,33 @@ class Logger(object):
                 file.write(str(arg) + ' : ' + str(getattr(args, arg)) + '\n')
                 self.args[str(arg)] = getattr(args, arg)
 
+    def plot_example(self, Paths, Perms, Cities):
+        # only first element of the batch
+        predicted_path = Paths[0].cpu().numpy()
+        oracle_path = Perms[0].cpu().numpy()
+        cities = Cities[0].cpu().numpy()
+        plt.figure(2, figsize=(20, 20))
+        plt.clf()
+        oracle_path = oracle_path.astype(int)
+        # print('predicted path: ', predicted_path)
+        # print('oracle path: ', oracle_path)
+        oracle_cities = cities[oracle_path]
+        predicted_cities = cities[predicted_path]
+        oracle_cities = (np.concatenate((oracle_cities, np.expand_dims(
+                         oracle_cities[0], axis=0)), axis=0))
+        predicted_cities = (np.concatenate((predicted_cities, np.expand_dims(
+                            predicted_cities[0], axis=0)), axis=0))
+        plt.subplot(1, 2, 1)
+        plt.scatter(cities[:, 0], cities[:, 1], c='b')
+        plt.plot(oracle_cities[:, 0], oracle_cities[:, 1], c='r')
+        plt.title('Target from LKH')
+        plt.subplot(1, 2, 2)
+        plt.scatter(cities[:, 0], cities[:, 1], c='b')
+        plt.plot(predicted_cities[:, 0], predicted_cities[:, 1], c='g')
+        plt.title('Predicted from GNN')
+        path = os.path.join(self.path_dir, 'example_tsp.png')
+        plt.savefig(path)
+
     def add_train_loss(self, loss):
         self.loss_train.append(loss.data.cpu().numpy())
 
@@ -54,67 +87,83 @@ class Logger(object):
         self.loss_test.append(loss)
 
     def add_train_accuracy(self, pred, labels, W):
-        # accuracy = utils.compute_recovery_rate(pred, labels)
-        # accuracy = utils.compute_accuracy(pred, labels)
-        accuracy = utils.compute_mean_cost(pred, W)
+        accuracy = utils.compute_accuracy(pred, labels)
+        costs = utils.compute_mean_cost(pred, W)
         self.accuracy_train.append(accuracy)
-        if len(self.accuracy_train) > 20:
-           self.accuracy_train[-1] = sum(self.accuracy_train[-20:])/20.0
+        self.cost_train.append(sum(costs) / float(len(costs)))
 
-    def add_test_accuracy(self, pred, labels, W):
-        # accuracy = utils.compute_recovery_rate(pred, labels)
-        # accuracy = utils.compute_accuracy(pred, labels)
-        accuracy = utils.compute_mean_cost(pred, W)
-        self.accuracy_test.append(accuracy)
+    def add_test_accuracy(self, pred, labels, perms, W, cities,
+                          last=False, beam_size=2):
+        accuracy = utils.compute_accuracy(pred, labels)
+        costs, Paths = utils.beamsearch_hamcycle(pred.data, W.data,
+                                                 beam_size=beam_size)
+        self.accuracy_test_aux.append(accuracy)
+        self.cost_test_aux.append(sum(costs) / float(len(costs)))
+        if last:
+            accuracy_test = np.array(self.accuracy_test_aux).mean()
+            self.accuracy_test.append(accuracy_test)
+            self.accuracy_test_aux = []
+            cost_test = np.array(self.cost_test_aux).mean()
+            self.cost_test.append(cost_test)
+            self.cost_test_aux = []
+            self.plot_example(Paths, perms, cities)
 
-    def plot_train_loss(self):
-        plt.figure(0)
+    def plot_train_logs(self):
+        plt.figure(0, figsize=(20, 20))
         plt.clf()
+        # plot loss
+        plt.subplot(3, 1, 1)
         iters = range(len(self.loss_train))
         plt.semilogy(iters, self.loss_train, 'b')
         plt.xlabel('iterations')
         plt.ylabel('Cross Entropy Loss')
-        plt.title('Training Loss: p={}, p_e={}'
-                  .format(self.args['edge_density'], self.args['noise']))
-        path = os.path.join(self.path_dir, 'training_loss.png') 
-        plt.savefig(path)
-
-    def plot_test_loss(self):
-        plt.figure(1)
-        plt.clf()
-        test_freq = self.args['test_freq']
-        iters = test_freq * range(len(self.loss_test))
-        plt.semilogy(iters, self.loss_test, 'b')
-        plt.xlabel('iterations')
-        plt.ylabel('Cross Entropy Loss')
-        plt.title('Testing Loss: p={}, p_e={}'
-                  .format(self.args['edge_density'], self.args['noise']))
-        path = os.path.join(self.path_dir, 'testing_loss.png') 
-        plt.savefig(path)
-
-    def plot_train_accuracy(self):
-        plt.figure(0)
-        plt.clf()
+        plt.title('Training Loss')
+        # plot accuracy
+        plt.subplot(3, 1, 2)
         iters = range(len(self.accuracy_train))
         plt.plot(iters, self.accuracy_train, 'b')
         plt.xlabel('iterations')
         plt.ylabel('Accuracy')
-        plt.title('Training Accuracy: p={}, p_e={}'
-                  .format(self.args['edge_density'], self.args['noise']))
-        path = os.path.join(self.path_dir, 'training_accuracy.png') 
+        plt.title('Training Accuracy')
+        # plot costs
+        plt.subplot(3, 1, 3)
+        iters = range(len(self.cost_train))
+        plt.plot(iters, self.cost_train, 'b')
+        plt.xlabel('iterations')
+        plt.ylabel('Average Mean cost')
+        plt.title('Average Mean cost Training')
+        plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=2.0)
+        path = os.path.join(self.path_dir, 'training.png') 
         plt.savefig(path)
 
-    def plot_test_accuracy(self):
-        plt.figure(1)
+    def plot_test_logs(self):
+        plt.figure(1, figsize=(20, 20))
         plt.clf()
+        # plot loss
+        plt.subplot(3, 1, 1)
         test_freq = self.args['test_freq']
-        iters = test_freq * range(len(self.accuracy_test))
+        iters = test_freq * np.arange(len(self.loss_test))
+        plt.semilogy(iters, self.loss_test, 'b')
+        plt.xlabel('iterations')
+        plt.ylabel('Cross Entropy Loss')
+        plt.title('Testing Loss')
+        # plot accuracy
+        plt.subplot(3, 1, 2)
+        iters = test_freq * np.arange(len(self.accuracy_test))
         plt.plot(iters, self.accuracy_test, 'b')
         plt.xlabel('iterations')
         plt.ylabel('Accuracy')
-        plt.title('Testing Accuracy: p={}, p_e={}'
-                  .format(self.args['edge_density'], self.args['noise']))
-        path = os.path.join(self.path_dir, 'testing_accuracy.png') 
+        plt.title('Testing Accuracy')
+        # plot costs
+        plt.subplot(3, 1, 3)
+        beam_size = self.args['beam_size']
+        iters = range(len(self.cost_test))
+        plt.plot(iters, self.cost_test, 'b')
+        plt.xlabel('iterations')
+        plt.ylabel('Mean cost')
+        plt.title('Mean cost Testing with beam_size : {}'.format(beam_size))
+        plt.tight_layout(pad=0.8, w_pad=0.5, h_pad=2.0)
+        path = os.path.join(self.path_dir, 'testing.png') 
         plt.savefig(path)
 
 if __name__ == '__main__':
@@ -132,15 +181,19 @@ if __name__ == '__main__':
     pred = sample[1][0]
     perm = sample[1][1]
     optimal_costs = sample[2]
+    ########################## test compute accuracy ##########################
+    labels = torch.topk(WTSP, 2, dim=2)[1]
+    accuracy = utils.compute_accuracy(WTSP, labels)
+    print('accuracy', accuracy)
     ########################## test compute_hamcycle ##########################
-    # costs, = utils.compute_hamcycle(pred, W)
+    # costs, = utils.greedy_hamcycle(pred, W)
     # print('W', W)
     # print('oracle perm', perm)
     # print('costs', costs[0])
     # print('optimal_costs', optimal_costs)
     # print(costs[0]/optimal_costs)
     ############################# test beamsearch #############################
-    costs, paths = utils.beamsearch_hamcycle(WTSP.data, W.data)
-    print('paths', paths)
-    print('WTSP', WTSP)
+    # costs, paths = utils.beamsearch_hamcycle(WTSP.data, W.data)
+    # print('paths', paths)
+    # print('WTSP', WTSP)
     # print('W', W)

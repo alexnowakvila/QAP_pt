@@ -35,7 +35,7 @@ class Generator(TSP):
         self.num_examples_test = 10e4
         self.data_train = []
         self.data_test = []
-        self.N = 10
+        self.N = 20
         self.J = 4
         self.mode = mode
         self.sym = True
@@ -109,6 +109,7 @@ class Generator(TSP):
             cities = self.cities_generator(self.N)
             W = self.adj_from_coord(cities)
             WW, x = self.compute_operators(W)
+            example['cities'] = cities
             example['WW'], example['x'] = WW, x
             # compute hamiltonian cycle
             self.save_solverformat(cities, self.N, mode='CEIL_2D')
@@ -118,7 +119,7 @@ class Generator(TSP):
             example['WW'], example['x'] = WW, x
             # compute hamiltonian cycle
             self.save_solverformat(W, self.N, mode='EXPLICIT')
-            # raise ValueError('Mode {} not supported.'.format(mode))
+            raise ValueError('Mode {} not yet supported.'.format(mode))
         else:
             raise ValueError('Mode {} not supported.'.format(mode))
         self.tsp_solver(self.N)
@@ -130,6 +131,7 @@ class Generator(TSP):
         example['WTSP'] = self.perm_to_adj(ham_cycle, self.N)
         example['labels'] = self.perm_to_labels(ham_cycle, self.N,
                                                 sym=self.sym)
+        example['perm'] = ham_cycle
         return example
 
     def create_dataset_train(self):
@@ -172,11 +174,12 @@ class Generator(TSP):
             print('Saving testing datatset at {}'.format(path))
             np.save(open(path, 'wb'), self.data_test)
 
-    def sample_batch(self, num_samples, is_training=True,
+    def sample_batch(self, num_samples, is_training=True, it=0,
                      cuda=True, volatile=False):
         WW_size = self.data_train[0]['WW'].shape
         x_size = self.data_train[0]['x'].shape
 
+        # define batch elements
         WW = torch.zeros(num_samples, *WW_size)
         X = torch.zeros(num_samples, *x_size)
         WTSP = torch.zeros(num_samples, *WW_size[:-1])
@@ -184,38 +187,47 @@ class Generator(TSP):
             P = torch.zeros(num_samples, self.N, 2)
         else:
             P = torch.zeros(num_samples, self.N)
+        Cities = torch.zeros((num_samples, WW_size[1], 2))
+        Perm = torch.zeros((num_samples, WW_size[1]))
         Cost = np.zeros(num_samples)
-
+        # fill batch elements 
         if is_training:
             dataset = self.data_train
         else:
-            datatset = self.data_test
+            dataset = self.data_test
         for b in range(num_samples):
-            ind = np.random.randint(0, len(dataset))
+            if is_training:
+                # random element in the dataset
+                ind = np.random.randint(0, len(dataset))
+            else:
+                ind = it * num_samples + b
             ww = torch.from_numpy(dataset[ind]['WW'])
             x = torch.from_numpy(dataset[ind]['x'])
-            WW[b] = ww
-            X[b] = x
+            WW[b], X[b] = ww, x
             WTSP[b] = torch.from_numpy(dataset[ind]['WTSP'])
             P[b] = torch.from_numpy(dataset[ind]['labels'])
+            Cities[b] = torch.from_numpy(dataset[ind]['cities'])
+            Perm[b] = torch.from_numpy(dataset[ind]['perm'])
             Cost[b] = dataset[ind]['Length_cycle']
+        # wrap as variables
         WW = Variable(WW, volatile=volatile)
         X = Variable(X, volatile=volatile)
         WTSP = Variable(WTSP, volatile=volatile)
         P = Variable(P, volatile=volatile)
         if cuda:
-            return [WW.cuda(), X.cuda()], [WTSP.cuda(), P.cuda()], Cost
+            return ([WW.cuda(), X.cuda()], [WTSP.cuda(), P.cuda()],
+                    Cities.cuda(), Perm.cuda(), Cost)
         else:
-            return [WW, X], [WTSP, P], Cost
+            return [WW, X], [WTSP, P], Cities, Perm, Cost
 
 if __name__ == '__main__':
     # Test Generator module
-    N = 10
+    N = 20
     path_dataset = '/data/anowak/TSP/'
     path_tsp = '/home/anowak/QAP_pt/src/tsp/LKH/'
     gen = Generator(path_dataset, path_tsp)
-    gen.num_examples_train = 2000
-    gen.num_examples_test = 400
+    gen.num_examples_train = 20000
+    gen.num_examples_test = 1000
     gen.N = N
     gen.load_dataset()
     out = gen.sample_batch(32, cuda=False)
