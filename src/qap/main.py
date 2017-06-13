@@ -99,6 +99,7 @@ def train(siamese_gnn, logger, gen):
         elapsed = time.time() - start
         if it % logger.args['test_freq'] == 0:
             logger.plot_train_accuracy()
+            logger.plot_train_loss()
             loss = loss.data.cpu().numpy()[0]
             info = ['iteration', 'loss', 'accuracy', 'elapsed']
             out = [it, loss, logger.accuracy_train[-1], elapsed]

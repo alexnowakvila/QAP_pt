@@ -4,7 +4,8 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from scipy.spatial import ConvexHull
+from data_generator import Generator
+import utils
 
 import torch
 import torch.nn as nn
@@ -20,14 +21,6 @@ else:
     dtype = torch.FloatTensor
     dtype_l = torch.LongTensor
     torch.manual_seed(0)
-
-def compute_recovery_rate(pred, labels):
-    pred = pred.max(2)[1]
-    error = 1 - torch.eq(pred, labels).type(dtype).squeeze(2)
-    frob_norm = error.mean(1).squeeze(1)
-    accuracy = 1 - frob_norm
-    accuracy = accuracy.mean(0).squeeze()
-    return accuracy.data.cpu().numpy()[0]
 
 class Logger(object):
     def __init__(self, path_logger):
@@ -60,21 +53,25 @@ class Logger(object):
     def add_test_loss(self, loss):
         self.loss_test.append(loss)
 
-    def add_train_accuracy(self, pred, labels):
-        accuracy = compute_recovery_rate(pred, labels)
+    def add_train_accuracy(self, pred, labels, W):
+        # accuracy = utils.compute_recovery_rate(pred, labels)
+        # accuracy = utils.compute_accuracy(pred, labels)
+        accuracy = utils.compute_mean_cost(pred, W)
         self.accuracy_train.append(accuracy)
         if len(self.accuracy_train) > 20:
            self.accuracy_train[-1] = sum(self.accuracy_train[-20:])/20.0
 
-    def add_test_accuracy(self, pred, labels):
-        accuracy = compute_recovery_rate(pred, labels)
+    def add_test_accuracy(self, pred, labels, W):
+        # accuracy = utils.compute_recovery_rate(pred, labels)
+        # accuracy = utils.compute_accuracy(pred, labels)
+        accuracy = utils.compute_mean_cost(pred, W)
         self.accuracy_test.append(accuracy)
 
     def plot_train_loss(self):
         plt.figure(0)
         plt.clf()
         iters = range(len(self.loss_train))
-        plt.plot(iters, self.loss_train, 'b')
+        plt.semilogy(iters, self.loss_train, 'b')
         plt.xlabel('iterations')
         plt.ylabel('Cross Entropy Loss')
         plt.title('Training Loss: p={}, p_e={}'
@@ -87,7 +84,7 @@ class Logger(object):
         plt.clf()
         test_freq = self.args['test_freq']
         iters = test_freq * range(len(self.loss_test))
-        plt.plot(iters, self.loss_test, 'b')
+        plt.semilogy(iters, self.loss_test, 'b')
         plt.xlabel('iterations')
         plt.ylabel('Cross Entropy Loss')
         plt.title('Testing Loss: p={}, p_e={}'
@@ -120,3 +117,23 @@ class Logger(object):
         path = os.path.join(self.path_dir, 'testing_accuracy.png') 
         plt.savefig(path)
 
+if __name__ == '__main__':
+    path_dataset = '/data/anowak/TSP/'
+    path_logger = '/home/anowak/tmp/TSP1/'
+    path_tsp = '/home/anowak/QAP_pt/src/tsp/LKH/'
+    gen = Generator(path_dataset, path_tsp, mode='CEIL_2D')
+    gen.num_examples_train = 200
+    gen.num_examples_test = 40
+    gen.J = 4
+    gen.load_dataset()
+    sample = gen.sample_batch(1, cuda=torch.cuda.is_available())
+    W = sample[0][0][:, :, :, 1]
+    pred = sample[1][0]
+    perm = sample[1][1]
+    optimal_costs = sample[2]
+    costs = utils.compute_hamcycle(pred, W)
+    print('W', W)
+    print('oracle perm', perm)
+    print('costs', costs[0])
+    print('optimal_costs', optimal_costs)
+    print(costs[0]/optimal_costs)

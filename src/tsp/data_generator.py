@@ -17,6 +17,7 @@ import string
 import re
 import random
 import argparse
+import math
 
 import torch
 import torch.nn as nn
@@ -26,7 +27,7 @@ from torch import optim
 import torch.nn.functional as F
 
 class Generator(TSP):
-    def __init__(self, path_dataset, path_tsp, mode='EUC_2D'):
+    def __init__(self, path_dataset, path_tsp, mode='CEIL_2D'):
         super().__init__(path_tsp)
         # TSP.__init__(self, path_dataset)
         self.path_dataset = path_dataset
@@ -34,9 +35,10 @@ class Generator(TSP):
         self.num_examples_test = 10e4
         self.data_train = []
         self.data_test = []
-        self.N = 20
-        self.J = 3
+        self.N = 10
+        self.J = 4
         self.mode = mode
+        self.sym = True
 
     def ErdosRenyi(self, p, N):
         W = np.zeros((N, N))
@@ -69,46 +71,65 @@ class Generator(TSP):
         N = cities.shape[0]
         W = np.zeros((N, N))
         def l2_dist(x, y):
-            return np.sqrt(np.square(x - y).sum())
+            return math.ceil(np.sqrt(np.square(x - y).sum()))
+        def l1_dist(x, y):
+            return np.abs(x - y).sum()
         for i in range(0, N - 1):
             for j in range(i + 1, N):
-                W[i, j] = l2_dist(cities[i], cities[j])
+                city1 = cities[i]*self.C
+                city2 = cities[j]*self.C
+                dist = l2_dist(city1, city2)/float(self.C)
+                W[i, j] = np.sqrt(2) - float(dist)
                 W[j, i] = W[i, j]
         return W
 
-    def cycle_adj(self, N):
+    def cycle_adj(self, N, sym=False):
         W = np.zeros((N, N))
-        W[N-1, N-2] = 1
-        W[N-1, 0] = 1
-        W[0, 1] = 1
-        W[0, N-1] = 1
-        for i in range(1, N-1):
-            W[i, i-1] = 1
-            W[i, i+1] = 1
+        if sym:
+            W[N-1, N-2] = 1
+            W[N-1, 0] = 1
+            W[0, 1] = 1
+            W[0, N-1] = 1
+            for i in range(1, N-1):
+                W[i, i-1] = 1
+                W[i, i+1] = 1
+        else:
+            W[N-1, N-2] = 0
+            W[N-1, 0] = 0
+            W[0, 1] = 1
+            W[0, N-1] = 1
+            for i in range(1, N-1):
+                W[i, i-1] = 0
+                W[i, i+1] = 1
         return W
 
     def compute_example(self):
         example = {}
-        if mode == 'EUC_2D':
+        if self.mode == 'CEIL_2D':
             cities = self.cities_generator(self.N)
             W = self.adj_from_coord(cities)
-            C = self.cycle_adj(self.N)
             WW, x = self.compute_operators(W)
-            WC, x_c = self.compute_operators(C)
             example['WW'], example['x'] = WW, x
-            example['WC'], example['x_c'] = WC, x_c
             # compute hamiltonian cycle
-            self.save_solverformat(cities, self.N, mode='EUC_2D')
-        elif mode == 'FULL_MATRIX':
-            raise ValueError('Mode {} not supported.'.format(mode))
+            self.save_solverformat(cities, self.N, mode='CEIL_2D')
+        elif self.mode == 'EXPLICIT':
+            W = self.adj_generator(self.N)
+            WW, x = self.compute_operators(W)
+            example['WW'], example['x'] = WW, x
+            # compute hamiltonian cycle
+            self.save_solverformat(W, self.N, mode='EXPLICIT')
+            # raise ValueError('Mode {} not supported.'.format(mode))
         else:
             raise ValueError('Mode {} not supported.'.format(mode))
         self.tsp_solver(self.N)
         # print(cities)
-        ham_cycle, length_cycle = self.extract_path(0)
-        example['HAM_cycle'] = np.array(ham_cycle[:-1])
-        # print(ham_cycle[:-1])
-        example['Length_cycle'] = length_cycle / self.C
+        ham_cycle, length_cycle = self.extract_path(self.N)
+        example['HAM_cycle'] = ham_cycle
+        cost = float(length_cycle)/float(self.C)
+        example['Length_cycle'] = np.sqrt(2)*self.N - cost
+        example['WTSP'] = self.perm_to_adj(ham_cycle, self.N)
+        example['labels'] = self.perm_to_labels(ham_cycle, self.N,
+                                                sym=self.sym)
         return example
 
     def create_dataset_train(self):
@@ -129,7 +150,8 @@ class Generator(TSP):
 
     def load_dataset(self):
         # load train dataset
-        path = os.path.join(self.path_dataset, 'TSP{}train.np'.format(self.N))
+        filename = 'TSP{}{}train.np'.format(self.N, self.mode)
+        path = os.path.join(self.path_dataset, filename)
         if os.path.exists(path):
             print('Reading training dataset at {}'.format(path))
             self.data_train = np.load(open(path, 'rb'))
@@ -139,7 +161,8 @@ class Generator(TSP):
             print('Saving training datatset at {}'.format(path))
             np.save(open(path, 'wb'), self.data_train)
         # load test dataset
-        path = os.path.join(self.path_dataset, 'TSP{}test.np'.format(self.N))
+        filename = 'TSP{}{}test.np'.format(self.N, self.mode)
+        path = os.path.join(self.path_dataset, filename)
         if os.path.exists(path):
             print('Reading testing dataset at {}'.format(path))
             self.data_test = np.load(open(path, 'rb'))
@@ -151,14 +174,17 @@ class Generator(TSP):
 
     def sample_batch(self, num_samples, is_training=True,
                      cuda=True, volatile=False):
-        #TODO: CHANGE
         WW_size = self.data_train[0]['WW'].shape
         x_size = self.data_train[0]['x'].shape
 
         WW = torch.zeros(WW_size).expand(num_samples, *WW_size)
         X = torch.zeros(x_size).expand(num_samples, *x_size)
-        WC = torch.zeros(WW_size).expand(num_samples, *WW_size)
-        X_c = torch.zeros(x_size).expand(num_samples, *x_size)
+        WTSP = torch.zeros(WW_size[:-1]).expand(num_samples, *WW_size[:-1])
+        if self.sym:
+            P = torch.zeros(num_samples, self.N, 2)
+        else:
+            P = torch.zeros(num_samples, self.N)
+        Cost = np.zeros(num_samples)
 
         if is_training:
             dataset = self.data_train
@@ -170,32 +196,30 @@ class Generator(TSP):
             x = torch.from_numpy(dataset[ind]['x'])
             WW[b] = ww
             X[b] = x
-            wc = torch.from_numpy(dataset[ind]['WC'])
-            x_c = torch.from_numpy(dataset[ind]['x_c'])
-            WC[b] = wc
-            X_c[b] = x_c
-        
+            WTSP[b] = torch.from_numpy(dataset[ind]['WTSP'])
+            P[b] = torch.from_numpy(dataset[ind]['labels'])
+            Cost[b] = dataset[ind]['Length_cycle']
         WW = Variable(WW, volatile=volatile)
         X = Variable(X, volatile=volatile)
-        WC = Variable(WC, volatile=volatile)
-        X_c = Variable(X_c, volatile=volatile)
+        WTSP = Variable(WTSP, volatile=volatile)
+        P = Variable(P, volatile=volatile)
 
         if cuda:
-            return [WW.cuda(), X.cuda()], [WC.cuda(), X_c.cuda()]
+            return [WW.cuda(), X.cuda()], [WTSP.cuda(), P.cuda()], Cost
         else:
-            return [WW, X], [WC, X_c]
+            return [WW, X], [WTSP, P], Cost
 
 if __name__ == '__main__':
     # Test Generator module
-    N = 50
+    N = 10
     path_dataset = '/data/anowak/TSP/'
     path_tsp = '/home/anowak/QAP_pt/src/tsp/LKH/'
     gen = Generator(path_dataset, path_tsp)
-    gen.num_examples_train = 20000
-    gen.num_examples_test = 4000
+    gen.num_examples_train = 2000
+    gen.num_examples_test = 400
     gen.N = N
     gen.load_dataset()
-    # g1, g2 = gen.sample_batch(32, cuda=False)
+    out = gen.sample_batch(32, cuda=False)
     # print(g1[0].size())
     # print(g1[0][0].data.cpu().numpy())
     print('Dataset of length {} created.'.format(N))

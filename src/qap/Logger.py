@@ -74,7 +74,7 @@ class Logger(object):
         plt.figure(0)
         plt.clf()
         iters = range(len(self.loss_train))
-        plt.plot(iters, self.loss_train, 'b')
+        plt.semilogy(iters, self.loss_train, 'b')
         plt.xlabel('iterations')
         plt.ylabel('Cross Entropy Loss')
         plt.title('Training Loss: p={}, p_e={}'
@@ -87,7 +87,7 @@ class Logger(object):
         plt.clf()
         test_freq = self.args['test_freq']
         iters = test_freq * range(len(self.loss_test))
-        plt.plot(iters, self.loss_test, 'b')
+        plt.semilogy(iters, self.loss_test, 'b')
         plt.xlabel('iterations')
         plt.ylabel('Cross Entropy Loss')
         plt.title('Testing Loss: p={}, p_e={}'
