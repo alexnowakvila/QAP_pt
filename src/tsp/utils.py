@@ -63,8 +63,8 @@ def compute_hamcycle(pred, W):
         col = int(nxt[0] == prev)
         end = nxt[col]
         return end
-    N = W.size()[-1]
-    batch_size = W.size()[0]
+    N = W.size(-1)
+    batch_size = W.size(0)
     Costs = []
     Paths = []
     pred = torch.topk(pred, 2, dim=2)[1]
@@ -88,15 +88,34 @@ def compute_hamcycle(pred, W):
         Paths.append(path)
     return Costs, Paths
 
-    def beamserch_hamcycle(pred, W, beam_size=10):
-        N = W.size()[-1]
-        batch_size = W.size()[0]
-        BS = BeamSearch(beam_size, batch_size, N)
-        for step in range(N):
-            BS.advance(pred, step)
-            prev = BS.get_current_origin().unsqueeze(2).expand_as(pred)
-            pred = pred.gather(1, prev)
-        # TO FINISH
+def compute_cost_path(Paths, W):
+    # Paths is a list of length N+1
+    batch_size = W.size(0)
+    N = W.size(-1)
+    Costs = []
+    for b in range(batch_size):
+        path = Paths[b].squeeze(0)
+        Wb = W[b].squeeze(0)
+        cost = 0.0
+        for node in range(N-1):
+            start = path[node]
+            end = path[node + 1]
+            cost += Wb[start, end]
+        cost += Wb[end, 0]
+        Costs.append(cost)
+    return Costs
 
-if __name__ == '__main__':
-    # test beam search module
+def beamsearch_hamcycle(pred, W, beam_size=2):
+    N = W.size(-1)
+    batch_size = W.size(0)
+    BS = BeamSearch(beam_size, batch_size, N)
+    trans_probs = pred.gather(1, BS.get_current_state())
+    for step in range(N-1):
+        BS.advance(trans_probs, step + 1)
+        trans_probs = pred.gather(1, BS.get_current_state())
+    ends = torch.zeros(batch_size, 1).type(dtype_l)
+    # extract paths
+    Paths = BS.get_hyp(ends)
+    # Compute cost of path
+    Costs = compute_cost_path(Paths, W)
+    return Costs, Paths

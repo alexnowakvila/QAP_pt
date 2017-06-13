@@ -177,9 +177,9 @@ class Generator(TSP):
         WW_size = self.data_train[0]['WW'].shape
         x_size = self.data_train[0]['x'].shape
 
-        WW = torch.zeros(WW_size).expand(num_samples, *WW_size)
-        X = torch.zeros(x_size).expand(num_samples, *x_size)
-        WTSP = torch.zeros(WW_size[:-1]).expand(num_samples, *WW_size[:-1])
+        WW = torch.zeros(num_samples, *WW_size)
+        X = torch.zeros(num_samples, *x_size)
+        WTSP = torch.zeros(num_samples, *WW_size[:-1])
         if self.sym:
             P = torch.zeros(num_samples, self.N, 2)
         else:
@@ -203,7 +203,6 @@ class Generator(TSP):
         X = Variable(X, volatile=volatile)
         WTSP = Variable(WTSP, volatile=volatile)
         P = Variable(P, volatile=volatile)
-
         if cuda:
             return [WW.cuda(), X.cuda()], [WTSP.cuda(), P.cuda()], Cost
         else:

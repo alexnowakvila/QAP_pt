@@ -126,14 +126,21 @@ if __name__ == '__main__':
     gen.num_examples_test = 40
     gen.J = 4
     gen.load_dataset()
-    sample = gen.sample_batch(1, cuda=torch.cuda.is_available())
-    W = sample[0][0][:, :, :, 1]
+    sample = gen.sample_batch(2, cuda=torch.cuda.is_available())
+    W = sample[0][0][:, :, :, 1] # weighted adjacency matrix
+    WTSP = sample[1][0] # hamiltonian cycle adjacency matrix
     pred = sample[1][0]
     perm = sample[1][1]
     optimal_costs = sample[2]
-    costs, = utils.compute_hamcycle(pred, W)
-    print('W', W)
-    print('oracle perm', perm)
-    print('costs', costs[0])
-    print('optimal_costs', optimal_costs)
-    print(costs[0]/optimal_costs)
+    ########################## test compute_hamcycle ##########################
+    # costs, = utils.compute_hamcycle(pred, W)
+    # print('W', W)
+    # print('oracle perm', perm)
+    # print('costs', costs[0])
+    # print('optimal_costs', optimal_costs)
+    # print(costs[0]/optimal_costs)
+    ############################# test beamsearch #############################
+    costs, paths = utils.beamsearch_hamcycle(WTSP.data, W.data)
+    print('paths', paths)
+    print('WTSP', WTSP)
+    # print('W', W)

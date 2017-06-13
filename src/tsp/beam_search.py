@@ -41,25 +41,23 @@ class BeamSearch(object):
         self.batch_size = batch_size
         self.beam_size = beam_size
         self.N = N
-        self.mask = (torch.Tensor(batch_size, beam_size,
-                     N).type(dtype).fill_(1))
+        self.mask = torch.ones(batch_size, beam_size, N).type(dtype)
         # mask the starting node of the beam search
         self.mask[:, :, 0] = 0
-        self.done = False
         # The score for each translation on the beam.
-        self.scores = torch.Tensor(batch_size, beam_size).type(dtype).zero_()
+        self.scores = torch.zeros(batch_size, beam_size).type(dtype)
         self.All_scores = []
         # The backpointers at each time-step.
         self.prev_Ks = []
         # The outputs at each time-step.
-        self.next_nodes = ([torch.Tensor(batch_size, beam_size)
-                           .type(dtype_l).fill_(-1)])
-        self.next_nodes[0][:, 0] = 0
+        self.next_nodes = [torch.zeros(batch_size, beam_size).type(dtype_l)]
 
     # Get the outputs for the current timestep.
     def get_current_state(self):
         """Get state of beam."""
-        return self.nextYs[-1]
+        current_state =  (self.next_nodes[-1].unsqueeze(2)
+                          .expand(self.batch_size, self.beam_size, self.N))
+        return current_state
 
     # Get the backpointers for the current timestep.
     def get_current_origin(self):
@@ -71,36 +69,35 @@ class BeamSearch(object):
         """Advance the beam."""
         # trans_probs has size (bs, K, N)
         # Sum the previous scores.
-        if len(self.prevKs) > 0:
+        if len(self.prev_Ks) > 0:
             beam_lk = (trans_probs + self.scores.unsqueeze(2)
-                       .expand_as(prev_probs))
+                       .expand_as(trans_probs))
         else:
-            beam_lk = trans_probs[:, 0]
+            beam_lk = trans_probs
+            # only use the first element of the beam (mask to zero the others)
+            beam_lk[:, 1:] = torch.zeros(beam_lk[:, 1:].size()).type(dtype)
         beam_lk = beam_lk * self.mask
         beam_lk = beam_lk.view(self.batch_size, -1)
         # beam_lk has size (bs, K*N)
         bestScores, bestScoresId = beam_lk.topk(self.beam_size, 1, True, True)
         # bestScores and bestScoresId have size (bs, K)
         self.scores = bestScores
-        prev_k = bestScoresId // self.N
+        prev_k = bestScoresId / self.N
         self.prev_Ks.append(prev_k)
         new_nodes = bestScoresId - prev_k * self.N
         self.next_nodes.append(new_nodes)
         # reindex mask
-        perm_mask = prev_k.unsqueeze(2).expand_as(mask) # (bs, K, N)
+        perm_mask = prev_k.unsqueeze(2).expand_as(self.mask) # (bs, K, N)
         self.mask = self.mask.gather(1, perm_mask)
         # mask new added nodes
         self.update_mask(new_nodes)
-        # End condition is when top-of-beam is EOS.
-        if it == self.N-1:
-            self.done = True
-        return self.done
 
     def update_mask(self, new_nodes):
         # sets new_nodes to zero in mask
-        arr = (torch.arange(0, self.N).unsqueeze(1).unsqueeze(0)
-               .expand_as(self.mask))
+        arr = (torch.arange(0, self.N).unsqueeze(0).unsqueeze(1)
+               .expand_as(self.mask).type(dtype_l))
         new_nodes = new_nodes.unsqueeze(2).expand_as(self.mask)
+        # print(arr, new_nodes)
         update_mask = 1 - torch.eq(arr, new_nodes).type(dtype)
         self.mask = self.mask*update_mask
 
@@ -117,8 +114,11 @@ class BeamSearch(object):
     def get_hyp(self, k):
         """ Walk back to construct the full hypothesis.
         k: the position in the beam to construct."""
-        hyp = []
+        assert self.N == len(self.prev_Ks) + 1
+        hyp = -1*torch.ones(self.batch_size, self.N).type(dtype_l)
+        # first node always zero
+        hyp[:, 0] = torch.zeros(self.batch_size, 1).type(dtype_l)
         for j in range(len(self.prev_Ks) - 1, -1, -1):
-            hyp.append(self.next_nodes[j + 1][k])
-            k = self.prev_Ks[j][k]
-        return hyp[::-1]
+            hyp[:, j+1] = self.next_nodes[j + 1].gather(1, k)
+            k = self.prev_Ks[j].gather(1, k)
+        return hyp
