@@ -54,7 +54,7 @@ parser.add_argument('--clip_grad_norm', nargs='?', const=1, type=float,
 ###############################################################################
 
 parser.add_argument('--num_features', nargs='?', const=1, type=int,
-                    default=20)
+                    default=50)
 parser.add_argument('--num_layers', nargs='?', const=1, type=int,
                     default=20)
 parser.add_argument('--J', nargs='?', const=1, type=int, default=4)
@@ -77,7 +77,20 @@ template_train1 = '{:<10} {:<10} {:<10} {:<10} {:<10} {:<10} '
 template_train2 = '{:<10} {:<10} {:<10.5f} {:<10.5f} {:<10.5f} {:<10.3f} \n'
 template_test1 = '{:<10} {:<10} {:<10} {:<10} {:<10} {:<10} {:<10}'
 template_test2 = '{:<10} {:<10} {:<10.5f} {:<10.5f} {:<10.5f} {:<10} {:<10.5f}'
+info_train = ['TRAIN', 'iteration', 'loss', 'accuracy', 'cost', 'elapsed']
+info_test = ['TEST', 'iteration', 'loss', 'accuracy', 'cost',
+             'beam_size', 'elapsed']
 cross_entropy = True
+
+def extract(sample):
+    input = sample[0], sample[0]
+    W = sample[0][0][:, :, :, 1]
+    WTSP, labels = sample[1][0].type(dtype_l), sample[1][1].type(dtype_l)
+    target = WTSP, labels
+    cities = sample[2]
+    perms = sample[3]
+    costs = sample[4]
+    return input, W, WTSP, labels, target, cities, perms, costs
 
 def compute_loss(pred, target):
     loss = 0.0
@@ -96,15 +109,10 @@ def compute_loss(pred, target):
 def train(siamese_gnn, logger, gen):
     optimizer = torch.optim.Adamax(siamese_gnn.parameters(), lr=1e-3)
     for it in range(args.iterations):
+        # siamese_gnn.train()
         start = time.time()
         sample = gen.sample_batch(batch_size, cuda=torch.cuda.is_available())
-        input = sample[0], sample[0]
-        W = sample[0][0][:, :, :, 1]
-        WTSP, labels = sample[1][0].type(dtype_l), sample[1][1].type(dtype_l)
-        target = WTSP, labels
-        cities = sample[2]
-        perms = sample[3]
-        costs = sample[4]
+        input, W, WTSP, labels, target, cities, perms, costs = extract(sample)
         pred = siamese_gnn(*input)
         loss = compute_loss(pred, target)
         siamese_gnn.zero_grad()
@@ -117,11 +125,9 @@ def train(siamese_gnn, logger, gen):
         if it % logger.args['print_freq'] == 0:
             logger.plot_train_logs()
             loss = loss.data.cpu().numpy()[0]
-            info = ['TRAIN', 'iteration', 'loss', 'accuracy',
-                    'cost', 'elapsed']
             out = ['---', it, loss, logger.accuracy_train[-1],
                    logger.cost_train[-1], elapsed]
-            print(template_train1.format(*info))
+            print(template_train1.format(*info_train))
             print(template_train2.format(*out))
         if it % logger.args['test_freq'] == 0:
             # test
@@ -131,30 +137,24 @@ def train(siamese_gnn, logger, gen):
 
 def test(siamese_gnn, logger, gen):
     iterations_test = int(gen.num_examples_test / batch_size)
+    # siamese_gnn.eval()
     for it in range(iterations_test):
         start = time.time()
         batch = gen.sample_batch(batch_size, is_training=False, it=it,
                                  cuda=torch.cuda.is_available())
-        input = batch[0], batch[0]
-        W = batch[0][0][:, :, :, 1]
-        WTSP, labels = batch[1][0].type(dtype_l), batch[1][1].type(dtype_l)
-        target = WTSP, labels
-        cities = batch[2]
-        perms = batch[3]
-        costs = batch[4]
+        input, W, WTSP, labels, target, cities, perms, costs = extract(batch)
         pred = siamese_gnn(*input)
         loss = compute_loss(pred, target)
         last = (it == iterations_test-1)
-        logger.add_test_accuracy(pred, labels, perms, W, cities, last=last,
-                                 beam_size=args.beam_size)
+        logger.add_test_accuracy(pred, labels, perms, W, cities, costs,
+                                 last=last, beam_size=args.beam_size)
+        logger.add_test_loss(loss, last=last)
         elapsed = time.time() - start
         if not last and it % 100 == 0:
-            info = ['TEST', 'iteration', 'loss', 'accuracy', 'cost',
-                    'beam_size', 'elapsed']
             loss = loss.data.cpu().numpy()[0]
             out = ['---', it, loss, logger.accuracy_test_aux[-1], 
                    logger.cost_test_aux[-1], args.beam_size, elapsed]
-            print(template_test1.format(*info))
+            print(template_test1.format(*info_test))
             print(template_test2.format(*out))
     print('TEST COST: {} | TEST ACCURACY {}\n'
           .format(logger.cost_test[-1], logger.accuracy_test[-1]))
@@ -162,7 +162,8 @@ def test(siamese_gnn, logger, gen):
 if __name__ == '__main__':
     logger = Logger(args.path_logger)
     logger.write_settings(args)
-    siamese_gnn = Siamese_GNN(args.num_features, args.num_layers, args.J + 2)
+    siamese_gnn = Siamese_GNN(args.num_features, args.num_layers,
+                              args.J + 2, dim_input=3)
     if torch.cuda.is_available():
         siamese_gnn.cuda()
     gen = Generator(args.path_dataset, args.path_tsp)

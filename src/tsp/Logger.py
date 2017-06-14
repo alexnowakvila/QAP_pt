@@ -35,12 +35,15 @@ class Logger(object):
             os.mkdir(directory)
         self.loss_train = []
         self.loss_test = []
+        self.loss_test_aux = []
         self.accuracy_train = []
         self.accuracy_test = []
         self.accuracy_test_aux = []
         self.cost_train = []
         self.cost_test = []
+        self.cost_test_oracle = []
         self.cost_test_aux = []
+        self.cost_test_aux_oracle = []
         self.path_examples = None
         self.args = None
 
@@ -83,8 +86,12 @@ class Logger(object):
     def add_train_loss(self, loss):
         self.loss_train.append(loss.data.cpu().numpy())
 
-    def add_test_loss(self, loss):
-        self.loss_test.append(loss)
+    def add_test_loss(self, loss, last=False):
+        self.loss_test_aux.append(loss.data.cpu().numpy())
+        if last:
+            loss_test = np.array(self.loss_test_aux).mean()
+            self.loss_test.append(loss_test)
+            self.loss_test_aux = []
 
     def add_train_accuracy(self, pred, labels, W):
         accuracy = utils.compute_accuracy(pred, labels)
@@ -92,13 +99,14 @@ class Logger(object):
         self.accuracy_train.append(accuracy)
         self.cost_train.append(sum(costs) / float(len(costs)))
 
-    def add_test_accuracy(self, pred, labels, perms, W, cities,
+    def add_test_accuracy(self, pred, labels, perms, W, cities, oracle_costs,
                           last=False, beam_size=2):
         accuracy = utils.compute_accuracy(pred, labels)
         costs, Paths = utils.beamsearch_hamcycle(pred.data, W.data,
                                                  beam_size=beam_size)
         self.accuracy_test_aux.append(accuracy)
-        self.cost_test_aux.append(sum(costs) / float(len(costs)))
+        self.cost_test_aux.append(np.array(costs.cpu().numpy()).mean())
+        self.cost_test_aux_oracle.append(np.array(oracle_costs).mean())
         if last:
             accuracy_test = np.array(self.accuracy_test_aux).mean()
             self.accuracy_test.append(accuracy_test)
@@ -106,6 +114,9 @@ class Logger(object):
             cost_test = np.array(self.cost_test_aux).mean()
             self.cost_test.append(cost_test)
             self.cost_test_aux = []
+            cost_test_oracle = np.array(self.cost_test_aux_oracle).mean()
+            self.cost_test_oracle.append(cost_test_oracle)
+            self.cost_test_aux_oracle = []
             self.plot_example(Paths, perms, cities)
 
     def plot_train_logs(self):
@@ -159,6 +170,7 @@ class Logger(object):
         beam_size = self.args['beam_size']
         iters = range(len(self.cost_test))
         plt.plot(iters, self.cost_test, 'b')
+        plt.plot(iters, self.cost_test_oracle, 'r')
         plt.xlabel('iterations')
         plt.ylabel('Mean cost')
         plt.title('Mean cost Testing with beam_size : {}'.format(beam_size))

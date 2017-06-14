@@ -109,6 +109,8 @@ class Generator(TSP):
             cities = self.cities_generator(self.N)
             W = self.adj_from_coord(cities)
             WW, x = self.compute_operators(W)
+            # add_coordinates
+            x = np.concatenate([x, cities], axis=1)
             example['cities'] = cities
             example['WW'], example['x'] = WW, x
             # compute hamiltonian cycle

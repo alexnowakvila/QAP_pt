@@ -90,11 +90,11 @@ class Gconv(nn.Module):
         return W, x
 
 class GNN(nn.Module):
-    def __init__(self, num_features, num_layers, J):
+    def __init__(self, num_features, num_layers, J, dim_input=1):
         super(GNN, self).__init__()
         self.num_features = num_features
         self.num_layers = num_layers
-        self.featuremap_in = [1, 1, num_features]
+        self.featuremap_in = [dim_input, 1, num_features]
         self.featuremap_mi = [num_features, num_features, num_features]
         self.featuremap_end = [num_features, num_features, num_features]
         self.layer0 = Gconv(self.featuremap_in, J)
@@ -111,9 +111,9 @@ class GNN(nn.Module):
         return out[1]
 
 class Siamese_GNN(nn.Module):
-    def __init__(self, num_features, num_layers, J):
+    def __init__(self, num_features, num_layers, J, dim_input=1):
         super(Siamese_GNN, self).__init__()
-        self.gnn = GNN(num_features, num_layers, J)
+        self.gnn = GNN(num_features, num_layers, J, dim_input=dim_input)
 
     def forward(self, g1, g2):
         emb1 = self.gnn(g1)
@@ -123,10 +123,10 @@ class Siamese_GNN(nn.Module):
         return out # out has size (bs, N, N)
 
 class Siamese_2GNN(nn.Module):
-    def __init__(self, num_features, num_layers, J):
+    def __init__(self, num_features, num_layers, J, dim_input=1):
         super(Siamese_2GNN, self).__init__()
-        self.gnn1 = GNN(num_features, num_layers, J)
-        self.gnn2 = GNN(num_features, num_layers, J)
+        self.gnn1 = GNN(num_features, num_layers, J, dim_input=dim_input)
+        self.gnn2 = GNN(num_features, num_layers, J, dim_input=dim_input)
 
     def forward(self, g1, g2):
         emb1 = self.gnn1(g1)
