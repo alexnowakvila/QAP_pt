@@ -54,6 +54,17 @@ class Logger(object):
                 file.write(str(arg) + ' : ' + str(getattr(args, arg)) + '\n')
                 self.args[str(arg)] = getattr(args, arg)
 
+    def save_model(self, model):
+        save_dir = os.path.join(self.path, 'parameters/')
+        # Create directory if necessary
+        try:
+            os.stat(save_dir)
+        except:
+            os.mkdir(save_dir)
+        path = os.path.join(save_dir, 'gnn.pt')
+        torch.save(model, path)
+        print('Model Saved.')
+
     def add_train_loss(self, loss):
         self.loss_train.append(loss.data.cpu().numpy())
 
@@ -63,8 +74,6 @@ class Logger(object):
     def add_train_accuracy(self, pred, labels):
         accuracy = compute_recovery_rate(pred, labels)
         self.accuracy_train.append(accuracy)
-        if len(self.accuracy_train) > 20:
-           self.accuracy_train[-1] = sum(self.accuracy_train[-20:])/20.0
 
     def add_test_accuracy(self, pred, labels):
         accuracy = compute_recovery_rate(pred, labels)
@@ -119,4 +128,10 @@ class Logger(object):
                   .format(self.args['edge_density'], self.args['noise']))
         path = os.path.join(self.path_dir, 'testing_accuracy.png') 
         plt.savefig(path)
+
+    def save_results(self):
+        path = os.path.join(self.path, 'results.npz')
+        np.savez(path, accuracy_train=np.array(self.accuracy_train),
+                 accuracy_test=np.array(self.accuracy_test),
+                 loss_train=self.loss_train, loss_test=self.loss_test)
 

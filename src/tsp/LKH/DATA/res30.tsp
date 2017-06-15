@@ -1,38 +1,38 @@
-NAME : pr30.tsp.483407.tour
-COMMENT : Length = 483407
-COMMENT : Found by LKH [Keld Helsgaun] Sat Jun 10 02:09:35 2017
+NAME : pr30.tsp.439516.tour
+COMMENT : Length = 439516
+COMMENT : Found by LKH [Keld Helsgaun] Thu Jun 15 01:16:15 2017
 TYPE : TOUR
 DIMENSION : 30
 TOUR_SECTION
 1
-16
-17
-27
-22
-30
-25
-10
-29
-3
-11
-2
-14
-13
-6
-8
-20
-24
-21
-15
-26
-4
-5
-23
-18
-12
 9
-19
-7
+6
+15
+13
+29
+22
+10
+24
+11
+4
 28
+16
+2
+8
+19
+17
+5
+7
+26
+3
+30
+14
+25
+27
+23
+20
+12
+21
+18
 -1
 EOF

@@ -8,6 +8,7 @@ import time
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
+import networkx
 
 #Pytorch requirements
 import unicodedata
@@ -32,6 +33,7 @@ class Generator(object):
         self.data_test = []
         self.J = 3
         self.N = 50
+        self.generative_model = 'ErdosRenyi'
         self.edge_density = 0.2
         self.noise = 0.03
         self.noise_model = 2
@@ -44,6 +46,21 @@ class Generator(object):
                 if add_edge:
                     W[i, j] = 1
                 W[j, i] = W[i, j]
+        return W
+
+    def ErdosRenyi_netx(self, p, N):
+        g = networkx.erdos_renyi_graph(N, p)
+        W = networkx.adjacency_matrix(g).todense().astype(float)
+        W = np.array(W)
+        return W
+
+    def RegularGraph_netx(self, p, N):
+        """ Generate random regular graph """
+        d = p * N
+        d = int(d)
+        g = networkx.random_regular_graph(d, N)
+        W = networkx.adjacency_matrix(g).todense().astype(float)
+        W = np.array(W)
         return W
 
     def compute_operators(self, W):
@@ -65,7 +82,13 @@ class Generator(object):
 
     def compute_example(self):
         example = {}
-        W = self.ErdosRenyi(self.edge_density, self.N)
+        if self.generative_model == 'ErdosRenyi':
+            W = self.ErdosRenyi_netx(self.edge_density, self.N)
+        elif self.generative_model == 'Regular':
+            W = self.RegularGraph_netx(self.edge_density, self.N)
+        else:
+            raise ValueError('Generative model {} not supported'
+                             .format(self.generative_model))
         if self.noise_model == 1:
             # use noise model from [arxiv 1602.04181], eq (3.8)
             noise = self.ErdosRenyi(self.noise, self.N)
@@ -74,14 +97,18 @@ class Generator(object):
             # use noise model from [arxiv 1602.04181], eq (3.9)
             pe1 = self.noise
             pe2 = (self.edge_density*self.noise)/(1.0-self.edge_density)
-            noise1 = self.ErdosRenyi(pe1, self.N)
-            noise2 = self.ErdosRenyi(pe2, self.N)
+            noise1 = self.ErdosRenyi_netx(pe1, self.N)
+            noise2 = self.ErdosRenyi_netx(pe2, self.N)
             W_noise = W*(1-noise1) + (1-W)*noise2
         else:
             raise ValueError('Noise model {} not implemented'
                              .format(self.noise_model))
         WW, x = self.compute_operators(W)
         WW_noise, x_noise = self.compute_operators(W_noise)
+        if self.generative_model == 'Regular':
+            # break symmetry if graph is regular.
+            x = np.random.uniform(0, 1, [self.N, 1])
+            x_noise = np.random.uniform(0, 1, [self.N, 1])
         example['WW'], example['x'] = WW, x
         example['WW_noise'], example['x_noise'] = WW_noise, x_noise
         return example
@@ -98,7 +125,9 @@ class Generator(object):
 
     def load_dataset(self):
         # load train dataset
-        path = os.path.join(self.path_dataset, 'QAPtrain.np')
+        filename = ('QAPtrain_{}_{}_{}.np'.format(self.generative_model,
+                    self.noise, self.edge_density))
+        path = os.path.join(self.path_dataset, filename)
         if os.path.exists(path):
             print('Reading training dataset at {}'.format(path))
             self.data_train = np.load(open(path, 'rb'))
@@ -108,7 +137,9 @@ class Generator(object):
             print('Saving training datatset at {}'.format(path))
             np.save(open(path, 'wb'), self.data_train)
         # load test dataset
-        path = os.path.join(self.path_dataset, 'QAPtest.np')
+        filename = ('QAPtest_{}_{}_{}.np'.format(self.generative_model,
+                    self.noise, self.edge_density))
+        path = os.path.join(self.path_dataset, filename)
         if os.path.exists(path):
             print('Reading testing dataset at {}'.format(path))
             self.data_test = np.load(open(path, 'rb'))
@@ -154,12 +185,30 @@ class Generator(object):
             return [WW, X], [WW_noise, X_noise]
 
 if __name__ == '__main__':
-    # Test Generator module
+    ###################### Test Generator module ##############################
     path = '/home/anowak/tmp/'
     gen = Generator(path)
     gen.num_examples_train = 10
     gen.num_examples_test = 10
+    gen.N = 50
+    gen.generative_model = 'Regular'
     gen.load_dataset()
     g1, g2 = gen.sample_batch(32, cuda=False)
     print(g1[0].size())
     print(g1[1][0].data.cpu().numpy())
+    W = g1[0][0, :, :, 1]
+    W_noise = g2[0][0, :, :, 1]
+    print(W, W.size())
+    print(W_noise.size(), W_noise)
+    ################### Test graph generators networkx ########################
+    # path = '/home/anowak/tmp/'
+    # gen = Generator(path)
+    # p = 0.2
+    # N = 50
+    # # W = gen.ErdosRenyi_netx(p, N)
+    # W = gen.RegularGraph_netx(3, N)
+    # G = networkx.from_numpy_matrix(W)
+    # networkx.draw(G)
+    # # plt.draw(G)
+    # plt.savefig('/home/anowak/tmp/prova.png')
+    # print('W', W)

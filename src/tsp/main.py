@@ -46,6 +46,7 @@ parser.add_argument('--path_logger', nargs='?', const=1, type=str, default='')
 parser.add_argument('--path_tsp', nargs='?', const=1, type=str, default='')
 parser.add_argument('--print_freq', nargs='?', const=1, type=int, default=100)
 parser.add_argument('--test_freq', nargs='?', const=1, type=int, default=500)
+parser.add_argument('--save_freq', nargs='?', const=1, type=int, default=2000)
 parser.add_argument('--clip_grad_norm', nargs='?', const=1, type=float,
                     default=40.0)
 
@@ -133,6 +134,8 @@ def train(siamese_gnn, logger, gen):
             # test
             test(siamese_gnn, logger, gen)
             logger.plot_test_logs()
+        if it % logger.args['save_freq'] == 0:
+            logger.save_model(siamese_gnn)
     print('Optimization finished.')
 
 def test(siamese_gnn, logger, gen):

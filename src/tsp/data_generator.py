@@ -224,7 +224,7 @@ class Generator(TSP):
 
 if __name__ == '__main__':
     # Test Generator module
-    N = 20
+    N = 50
     path_dataset = '/data/anowak/TSP/'
     path_tsp = '/home/anowak/QAP_pt/src/tsp/LKH/'
     gen = Generator(path_dataset, path_tsp)

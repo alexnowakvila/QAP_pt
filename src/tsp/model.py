@@ -117,9 +117,9 @@ class Siamese_GNN(nn.Module):
 
     def forward(self, g1, g2):
         emb1 = self.gnn(g1)
-        emb2 = self.gnn(g2)
+        # emb2 = self.gnn(g2)
         # embx are tensors of size (bs, N, num_features)
-        out = torch.bmm(emb1, emb2.permute(0, 2, 1))
+        out = torch.bmm(emb1, emb1.permute(0, 2, 1))
         return out # out has size (bs, N, N)
 
 class Siamese_2GNN(nn.Module):

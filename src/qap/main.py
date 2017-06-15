@@ -33,20 +33,24 @@ parser = argparse.ArgumentParser()
 ###############################################################################
 
 parser.add_argument('--num_examples_train', nargs='?', const=1, type=int,
-                    default=int(20000))
+                    default=int(30000))
 parser.add_argument('--num_examples_test', nargs='?', const=1, type=int,
-                    default=int(10e2))
+                    default=int(1000))
 parser.add_argument('--edge_density', nargs='?', const=1, type=float,
                     default=0.2)
 parser.add_argument('--noise', nargs='?', const=1, type=float, default=0.03)
 parser.add_argument('--noise_model', nargs='?', const=1, type=int, default=2)
+parser.add_argument('--generative_model', nargs='?', const=1, type=str,
+                    default='ErdosRenyi')
 parser.add_argument('--iterations', nargs='?', const=1, type=int,
-                    default=int(10e6))
+                    default=int(600000))
 parser.add_argument('--batch_size', nargs='?', const=1, type=int, default=1)
 parser.add_argument('--mode', nargs='?', const=1, type=str, default='train')
 parser.add_argument('--path_dataset', nargs='?', const=1, type=str, default='')
 parser.add_argument('--path_logger', nargs='?', const=1, type=str, default='')
-parser.add_argument('--test_freq', nargs='?', const=1, type=int, default=100)
+parser.add_argument('--print_freq', nargs='?', const=1, type=int, default=100)
+parser.add_argument('--test_freq', nargs='?', const=1, type=int, default=500)
+parser.add_argument('--save_freq', nargs='?', const=1, type=int, default=2000)
 parser.add_argument('--clip_grad_norm', nargs='?', const=1, type=float,
                     default=40.0)
 
@@ -73,8 +77,8 @@ else:
 
 batch_size = args.batch_size
 criterion = nn.CrossEntropyLoss()
-template1 = '{:<10} {:<10} {:<10} {:<10} '
-template2 = '{:<10} {:<10.5f} {:<10.5f} {:<10.3f} \n'
+template1 = '{:<10} {:<10} {:<10} {:<15} {:<10} {:<10} {:<10} '
+template2 = '{:<10} {:<10.5f} {:<10.5f} {:<15} {:<10} {:<10} {:<10.3f} \n'
 
 def compute_loss(pred, labels):
     pred = pred.view(-1, pred.size()[-1])
@@ -97,15 +101,20 @@ def train(siamese_gnn, logger, gen):
         logger.add_train_loss(loss)
         logger.add_train_accuracy(pred, labels)
         elapsed = time.time() - start
-        if it % logger.args['test_freq'] == 0:
+        if it % logger.args['print_freq'] == 0:
             logger.plot_train_accuracy()
             logger.plot_train_loss()
             loss = loss.data.cpu().numpy()[0]
-            info = ['iteration', 'loss', 'accuracy', 'elapsed']
-            out = [it, loss, logger.accuracy_train[-1], elapsed]
+            info = ['iteration', 'loss', 'accuracy', 'edge_density',
+                    'noise', 'model', 'elapsed']
+            out = [it, loss, logger.accuracy_train[-1], args.edge_density,
+                   args.noise, args.generative_model, elapsed]
             print(template1.format(*info))
             print(template2.format(*out))
             # test(siamese_gnn, logger, gen)
+        if it % logger.args['save_freq'] == 0:
+            logger.save_model(siamese_gnn)
+            logger.save_results()
     print('Optimization finished.')
 
 if __name__ == '__main__':
@@ -122,6 +131,7 @@ if __name__ == '__main__':
     gen.edge_density = args.edge_density
     gen.noise = args.noise
     gen.noise_model = args.noise_model
+    gen.generative_model = args.generative_model
     # load dataset
     gen.load_dataset()
     if args.mode == 'train':

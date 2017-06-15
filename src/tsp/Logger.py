@@ -56,6 +56,17 @@ class Logger(object):
                 file.write(str(arg) + ' : ' + str(getattr(args, arg)) + '\n')
                 self.args[str(arg)] = getattr(args, arg)
 
+    def save_model(self, model):
+        save_dir = os.path.join(self.path, 'parameters/')
+        # Create directory if necessary
+        try:
+            os.stat(save_dir)
+        except:
+            os.mkdir(save_dir)
+        path = os.path.join(save_dir, 'gnn.pt')
+        torch.save(model, path)
+        print('Model Saved.')
+
     def plot_example(self, Paths, Perms, Cities):
         # only first element of the batch
         predicted_path = Paths[0].cpu().numpy()
@@ -170,6 +181,7 @@ class Logger(object):
         beam_size = self.args['beam_size']
         iters = range(len(self.cost_test))
         plt.plot(iters, self.cost_test, 'b')
+        print('COST ORACLE', self.cost_test_oracle)
         plt.plot(iters, self.cost_test_oracle, 'r')
         plt.xlabel('iterations')
         plt.ylabel('Mean cost')
