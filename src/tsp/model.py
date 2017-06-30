@@ -50,6 +50,10 @@ def gmul(input):
     output = torch.cat(output, 2) # output has size (bs, N, J*num_features)
     return output
 
+def normalize_embeddings(emb):
+    norm = torch.mul(emb, emb).sum(2).sqrt().expand_as(emb)
+    return emb.div(norm)
+
 class Gconv_last(nn.Module):
     def __init__(self, feature_maps, J):
         super(Gconv_last, self).__init__()
@@ -75,6 +79,7 @@ class Gconv(nn.Module):
         self.fc1 = nn.Linear(self.num_inputs, self.num_outputs // 2)
         self.fc2 = nn.Linear(self.num_inputs, self.num_outputs // 2)
         self.bn = nn.BatchNorm1d(self.num_outputs)
+        self.bn_instance = nn.InstanceNorm1d(self.num_outputs)
 
     def forward(self, input):
         W = input[0]
@@ -85,8 +90,9 @@ class Gconv(nn.Module):
         x1 = F.relu(self.fc1(x)) # has size (bs*N, num_outputs)
         x2 = self.fc2(x)
         x = torch.cat((x1, x2), 1)
-        x = self.bn(x)
+        # x = self.bn(x)
         x = x.view(*x_size[:-1], self.num_outputs)
+        x = self.bn_instance(x.permute(0, 2, 1)).permute(0, 2, 1)
         return W, x
 
 class GNN(nn.Module):
@@ -111,15 +117,43 @@ class GNN(nn.Module):
         return out[1]
 
 class Siamese_GNN(nn.Module):
-    def __init__(self, num_features, num_layers, J, dim_input=1):
+    def __init__(self, num_features, num_layers, N, J,
+                 dim_input=1, dual=False):
         super(Siamese_GNN, self).__init__()
+        self.N = N
+        self.dual = dual
+        if self.dual:
+            dim_input=1
         self.gnn = GNN(num_features, num_layers, J, dim_input=dim_input)
+        self.linear_dual = nn.Linear(num_features, 1)
 
     def forward(self, g1, g2):
         emb1 = self.gnn(g1)
-        # emb2 = self.gnn(g2)
         # embx are tensors of size (bs, N, num_features)
-        out = torch.bmm(emb1, emb1.permute(0, 2, 1))
+        if self.dual:
+            emb_size = emb1.size()
+            emb1 = emb1.view(-1, emb_size[-1])
+            emb1 = self.linear_dual(emb1)
+            emb1 = emb1.view(*emb_size[:2], 1)
+            # reshape edge embeddings
+            batch_size = emb1.size()[0]
+            out = Variable(torch.zeros(batch_size, self.N, self.N)).type(dtype)
+            for b in range(batch_size):
+                count = 0
+                for i in range(0, self.N-1):
+                    for j in range(i+1, self.N):
+                        # print(i, j)
+                        out[b, i, j] = emb1[b, count]
+                        count +=1
+        else:
+            # l2normalize the embeddings
+            emb1 = normalize_embeddings(emb1)
+            out = torch.bmm(emb1, emb1.permute(0, 2, 1))
+            diag = (-1000 * Variable(torch.eye(self.N).unsqueeze(0)
+                    .expand_as(out)).type(dtype))
+            # print('out', out[0])
+            out = out + diag
+            # print('out', out[0])
         return out # out has size (bs, N, N)
 
 class Siamese_2GNN(nn.Module):

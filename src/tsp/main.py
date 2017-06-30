@@ -32,6 +32,8 @@ parser = argparse.ArgumentParser()
 #                             General Settings                                #
 ###############################################################################
 
+parser.add_argument('--dual', action='store_true')
+parser.add_argument('--load', action='store_true')
 parser.add_argument('--num_examples_train', nargs='?', const=1, type=int,
                     default=int(20000))
 parser.add_argument('--num_examples_test', nargs='?', const=1, type=int,
@@ -42,10 +44,11 @@ parser.add_argument('--batch_size', nargs='?', const=1, type=int, default=1)
 parser.add_argument('--beam_size', nargs='?', const=1, type=int, default=2)
 parser.add_argument('--mode', nargs='?', const=1, type=str, default='train')
 parser.add_argument('--path_dataset', nargs='?', const=1, type=str, default='')
+parser.add_argument('--path_load', nargs='?', const=1, type=str, default='')
 parser.add_argument('--path_logger', nargs='?', const=1, type=str, default='')
 parser.add_argument('--path_tsp', nargs='?', const=1, type=str, default='')
 parser.add_argument('--print_freq', nargs='?', const=1, type=int, default=100)
-parser.add_argument('--test_freq', nargs='?', const=1, type=int, default=500)
+parser.add_argument('--test_freq', nargs='?', const=1, type=int, default=2000)
 parser.add_argument('--save_freq', nargs='?', const=1, type=int, default=2000)
 parser.add_argument('--clip_grad_norm', nargs='?', const=1, type=float,
                     default=40.0)
@@ -59,6 +62,7 @@ parser.add_argument('--num_features', nargs='?', const=1, type=int,
 parser.add_argument('--num_layers', nargs='?', const=1, type=int,
                     default=20)
 parser.add_argument('--J', nargs='?', const=1, type=int, default=4)
+parser.add_argument('--N', nargs='?', const=1, type=int, default=20)
 
 args = parser.parse_args()
 
@@ -74,18 +78,23 @@ else:
 batch_size = args.batch_size
 CEL = nn.CrossEntropyLoss()
 BCE = nn.BCELoss()
-template_train1 = '{:<10} {:<10} {:<10} {:<10} {:<10} {:<10} '
-template_train2 = '{:<10} {:<10} {:<10.5f} {:<10.5f} {:<10.5f} {:<10.3f} \n'
+template_train1 = '{:<10} {:<10} {:<10} {:<10} {:<10} {:<10} {:<10} '
+template_train2 = ('{:<10} {:<10} {:<10.5f} {:<10.5f} {:<10.5f} {:<10}'
+                   '{:<10.3f} \n')
 template_test1 = '{:<10} {:<10} {:<10} {:<10} {:<10} {:<10} {:<10}'
 template_test2 = '{:<10} {:<10} {:<10.5f} {:<10.5f} {:<10.5f} {:<10} {:<10.5f}'
-info_train = ['TRAIN', 'iteration', 'loss', 'accuracy', 'cost', 'elapsed']
+info_train = ['TRAIN', 'iteration', 'loss', 'accuracy', 'cost', 'dual',
+              'elapsed']
 info_test = ['TEST', 'iteration', 'loss', 'accuracy', 'cost',
              'beam_size', 'elapsed']
 cross_entropy = True
 
 def extract(sample):
     input = sample[0], sample[0]
-    W = sample[0][0][:, :, :, 1]
+    if args.dual:
+        W = Variable(gen.create_adj(sample[2]))
+    else:
+        W = sample[0][0][:, :, :, 1]
     WTSP, labels = sample[1][0].type(dtype_l), sample[1][1].type(dtype_l)
     target = WTSP, labels
     cities = sample[2]
@@ -127,14 +136,14 @@ def train(siamese_gnn, logger, gen):
             logger.plot_train_logs()
             loss = loss.data.cpu().numpy()[0]
             out = ['---', it, loss, logger.accuracy_train[-1],
-                   logger.cost_train[-1], elapsed]
+                   logger.cost_train[-1], args.dual, elapsed]
             print(template_train1.format(*info_train))
             print(template_train2.format(*out))
         if it % logger.args['test_freq'] == 0:
             # test
             test(siamese_gnn, logger, gen)
             logger.plot_test_logs()
-        if it % logger.args['save_freq'] == 0:
+        if it % logger.args['save_freq'] == logger.args['save_freq'] - 1:
             logger.save_model(siamese_gnn)
     print('Optimization finished.')
 
@@ -165,17 +174,22 @@ def test(siamese_gnn, logger, gen):
 if __name__ == '__main__':
     logger = Logger(args.path_logger)
     logger.write_settings(args)
-    siamese_gnn = Siamese_GNN(args.num_features, args.num_layers,
-                              args.J + 2, dim_input=3)
-    if torch.cuda.is_available():
-        siamese_gnn.cuda()
     gen = Generator(args.path_dataset, args.path_tsp)
     # generator setup
     gen.num_examples_train = args.num_examples_train
     gen.num_examples_test = args.num_examples_test
     gen.J = args.J
+    gen.N = args.N
+    gen.dual = args.dual
     # load dataset
     gen.load_dataset()
+    # initialize model
+    siamese_gnn = Siamese_GNN(args.num_features, args.num_layers, gen.N,
+                              args.J + 2, dim_input=3, dual=args.dual)
+    if args.load:
+        siamese_gnn = logger.load_model(args.path_load)
+    if torch.cuda.is_available():
+        siamese_gnn.cuda()
     if args.mode == 'train':
         train(siamese_gnn, logger, gen)
     # elif args.mode == 'test':

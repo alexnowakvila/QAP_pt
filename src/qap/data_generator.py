@@ -35,6 +35,7 @@ class Generator(object):
         self.N = 50
         self.generative_model = 'ErdosRenyi'
         self.edge_density = 0.2
+        self.random_noise = False
         self.noise = 0.03
         self.noise_model = 2
 
@@ -64,20 +65,43 @@ class Generator(object):
         return W
 
     def compute_operators(self, W):
-        # operators: {Id, W, W^2, ..., W^{J-1}, D, U}
         N = W.shape[0]
-        d = W.sum(1)
-        D = np.diag(d)
-        QQ = W.copy()
-        WW = np.zeros([N, N, self.J + 2])
-        WW[:, :, 0] = np.eye(N)
-        for j in range(self.J):
-            WW[:, :, j + 1] = QQ.copy()
-            QQ = QQ * QQ
-        WW[:, :, self.J] = D
-        WW[:, :, self.J + 1] = np.ones((N, N)) * 1.0 / float(N)
-        WW = np.reshape(WW, [N, N, self.J + 2])
-        x = np.reshape(d, [N, 1])
+        if self.generative_model == 'ErdosRenyi':
+            # operators: {Id, W, W^2, ..., W^{J-1}, D, U}
+            d = W.sum(1)
+            D = np.diag(d)
+            QQ = W.copy()
+            WW = np.zeros([N, N, self.J + 2])
+            WW[:, :, 0] = np.eye(N)
+            for j in range(self.J):
+                WW[:, :, j + 1] = QQ.copy()
+                # QQ = np.dot(QQ, QQ)
+                QQ = np.minimum(np.dot(QQ, QQ), np.ones(QQ.shape))
+            WW[:, :, self.J] = D
+            WW[:, :, self.J + 1] = np.ones((N, N)) * 1.0 / float(N)
+            WW = np.reshape(WW, [N, N, self.J + 2])
+            x = np.reshape(d, [N, 1])
+        elif self.generative_model == 'Regular':
+            # operators: {Id, A, A^2}
+            ds = []
+            ds.append(W.sum(1))
+            QQ = W.copy()
+            WW = np.zeros([N, N, self.J + 2])
+            WW[:, :, 0] = np.eye(N)
+            for j in range(self.J):
+                WW[:, :, j + 1] = QQ.copy()
+                # QQ = np.dot(QQ, QQ)
+                QQ = np.minimum(np.dot(QQ, QQ), np.ones(QQ.shape))
+                ds.append(QQ.sum(1))
+            d = ds[1]
+            D = np.diag(ds[1])
+            WW[:, :, self.J] = D
+            WW[:, :, self.J + 1] = np.ones((N, N)) * 1.0 / float(N)
+            WW = np.reshape(WW, [N, N, self.J + 2])
+            x = np.reshape(d, [N, 1])
+        else:
+            raise ValueError('Generative model {} not implemented'
+                             .format(self.generative_model))
         return WW, x
 
     def compute_example(self):
@@ -89,6 +113,8 @@ class Generator(object):
         else:
             raise ValueError('Generative model {} not supported'
                              .format(self.generative_model))
+        if self.random_noise:
+            self.noise = np.random.uniform(0.000, 0.050, 1)
         if self.noise_model == 1:
             # use noise model from [arxiv 1602.04181], eq (3.8)
             noise = self.ErdosRenyi(self.noise, self.N)
@@ -105,10 +131,6 @@ class Generator(object):
                              .format(self.noise_model))
         WW, x = self.compute_operators(W)
         WW_noise, x_noise = self.compute_operators(W_noise)
-        if self.generative_model == 'Regular':
-            # break symmetry if graph is regular.
-            x = np.random.uniform(0, 1, [self.N, 1])
-            x_noise = np.random.uniform(0, 1, [self.N, 1])
         example['WW'], example['x'] = WW, x
         example['WW_noise'], example['x_noise'] = WW_noise, x_noise
         return example
@@ -125,8 +147,11 @@ class Generator(object):
 
     def load_dataset(self):
         # load train dataset
-        filename = ('QAPtrain_{}_{}_{}.np'.format(self.generative_model,
-                    self.noise, self.edge_density))
+        if self.random_noise:
+            filename = 'QAPtrain_RN.np'
+        else:
+            filename = ('QAPtrain_{}_{}_{}.np'.format(self.generative_model,
+                        self.noise, self.edge_density))
         path = os.path.join(self.path_dataset, filename)
         if os.path.exists(path):
             print('Reading training dataset at {}'.format(path))
@@ -137,8 +162,11 @@ class Generator(object):
             print('Saving training datatset at {}'.format(path))
             np.save(open(path, 'wb'), self.data_train)
         # load test dataset
-        filename = ('QAPtest_{}_{}_{}.np'.format(self.generative_model,
-                    self.noise, self.edge_density))
+        if self.random_noise:
+            filename = 'QAPtest_RN.np'
+        else:
+            filename = ('QAPtest_{}_{}_{}.np'.format(self.generative_model,
+                        self.noise, self.edge_density))
         path = os.path.join(self.path_dataset, filename)
         if os.path.exists(path):
             print('Reading testing dataset at {}'.format(path))

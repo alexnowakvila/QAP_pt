@@ -67,32 +67,53 @@ class Logger(object):
         torch.save(model, path)
         print('Model Saved.')
 
-    def plot_example(self, Paths, Perms, Cities):
-        # only first element of the batch
-        predicted_path = Paths[0].cpu().numpy()
-        oracle_path = Perms[0].cpu().numpy()
-        cities = Cities[0].cpu().numpy()
-        plt.figure(2, figsize=(20, 20))
-        plt.clf()
-        oracle_path = oracle_path.astype(int)
-        # print('predicted path: ', predicted_path)
-        # print('oracle path: ', oracle_path)
-        oracle_cities = cities[oracle_path]
-        predicted_cities = cities[predicted_path]
-        oracle_cities = (np.concatenate((oracle_cities, np.expand_dims(
-                         oracle_cities[0], axis=0)), axis=0))
-        predicted_cities = (np.concatenate((predicted_cities, np.expand_dims(
-                            predicted_cities[0], axis=0)), axis=0))
-        plt.subplot(1, 2, 1)
-        plt.scatter(cities[:, 0], cities[:, 1], c='b')
-        plt.plot(oracle_cities[:, 0], oracle_cities[:, 1], c='r')
-        plt.title('Target from LKH')
-        plt.subplot(1, 2, 2)
-        plt.scatter(cities[:, 0], cities[:, 1], c='b')
-        plt.plot(predicted_cities[:, 0], predicted_cities[:, 1], c='g')
-        plt.title('Predicted from GNN')
-        path = os.path.join(self.path_dir, 'example_tsp.png')
-        plt.savefig(path)
+    def load_model(self, parameters_path):
+        path = os.path.join(parameters_path, 'parameters/gnn.pt')
+        if os.path.exists(path):
+            print('GNN successfully loaded from {}'.format(path))
+            return torch.load(path)
+        else:
+            raise ValueError('Parameter path {} does not exist.'
+                             .format(path))
+
+
+    def plot_example(self, Paths, costs, oracle_costs, Perms,
+                     Cities, num_plots=1):
+        num_plots = min(num_plots, Paths.size(0))
+        num_plots = 32
+        for fig in range(num_plots):
+            cost = costs[fig]
+            oracle_cost = oracle_costs[fig]
+            predicted_path = Paths[fig].cpu().numpy()
+            oracle_path = Perms[fig].cpu().numpy()
+            cities = Cities[fig].cpu().numpy()
+            oracle_path = oracle_path.astype(int)
+            # print('predicted path: ', predicted_path)
+            # print('oracle path: ', oracle_path)
+            oracle_cities = cities[oracle_path]
+            predicted_cities = cities[predicted_path]
+            oracle_cities = (np.concatenate((oracle_cities, np.expand_dims(
+                             oracle_cities[0], axis=0)), axis=0))
+            predicted_cities = (np.concatenate((predicted_cities, np.
+                                expand_dims(predicted_cities[0], axis=0)),
+                                axis=0))
+            plt.figure(2, figsize=(12, 12))
+            plt.clf()
+            plt.scatter(cities[:, 0], cities[:, 1], c='b')
+            plt.plot(oracle_cities[:, 0], oracle_cities[:, 1], c='r')
+            plt.title('Target: {0:.3f}'
+                      .format(20*np.sqrt(2)-oracle_cost), fontsize=100)
+            path = os.path.join(self.path_dir, 'ground_tsp{}.eps'.format(fig))
+            plt.savefig(path, format='eps')
+
+            plt.figure(2, figsize=(12, 12))
+            plt.clf()
+            plt.scatter(cities[:, 0], cities[:, 1], c='b')
+            plt.plot(predicted_cities[:, 0], predicted_cities[:, 1], c='g')
+            plt.title('Predicted: {0:.3f}'
+                      .format(20*np.sqrt(2) - cost), fontsize=100)
+            path = os.path.join(self.path_dir, 'pred_tsp{}.eps'.format(fig))
+            plt.savefig(path, format='eps')
 
     def add_train_loss(self, loss):
         self.loss_train.append(loss.data.cpu().numpy())
@@ -128,7 +149,7 @@ class Logger(object):
             cost_test_oracle = np.array(self.cost_test_aux_oracle).mean()
             self.cost_test_oracle.append(cost_test_oracle)
             self.cost_test_aux_oracle = []
-            self.plot_example(Paths, perms, cities)
+            self.plot_example(Paths, costs, oracle_costs, perms, cities)
 
     def plot_train_logs(self):
         plt.figure(0, figsize=(20, 20))
@@ -181,7 +202,7 @@ class Logger(object):
         beam_size = self.args['beam_size']
         iters = range(len(self.cost_test))
         plt.plot(iters, self.cost_test, 'b')
-        print('COST ORACLE', self.cost_test_oracle)
+        print('COST ORACLE', self.cost_test_oracle[-1])
         plt.plot(iters, self.cost_test_oracle, 'r')
         plt.xlabel('iterations')
         plt.ylabel('Mean cost')

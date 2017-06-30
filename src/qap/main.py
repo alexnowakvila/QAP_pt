@@ -33,17 +33,18 @@ parser = argparse.ArgumentParser()
 ###############################################################################
 
 parser.add_argument('--num_examples_train', nargs='?', const=1, type=int,
-                    default=int(30000))
+                    default=int(20000))
 parser.add_argument('--num_examples_test', nargs='?', const=1, type=int,
                     default=int(1000))
 parser.add_argument('--edge_density', nargs='?', const=1, type=float,
                     default=0.2)
+parser.add_argument('--random_noise', action='store_true')
 parser.add_argument('--noise', nargs='?', const=1, type=float, default=0.03)
 parser.add_argument('--noise_model', nargs='?', const=1, type=int, default=2)
 parser.add_argument('--generative_model', nargs='?', const=1, type=str,
                     default='ErdosRenyi')
 parser.add_argument('--iterations', nargs='?', const=1, type=int,
-                    default=int(600000))
+                    default=int(60000))
 parser.add_argument('--batch_size', nargs='?', const=1, type=int, default=1)
 parser.add_argument('--mode', nargs='?', const=1, type=str, default='train')
 parser.add_argument('--path_dataset', nargs='?', const=1, type=str, default='')
@@ -129,10 +130,12 @@ if __name__ == '__main__':
     gen.num_examples_test = args.num_examples_test
     gen.J = args.J
     gen.edge_density = args.edge_density
+    gen.random_noise = args.random_noise
     gen.noise = args.noise
     gen.noise_model = args.noise_model
     gen.generative_model = args.generative_model
     # load dataset
+    # print(gen.random_noise)
     gen.load_dataset()
     if args.mode == 'train':
         train(siamese_gnn, logger, gen)
