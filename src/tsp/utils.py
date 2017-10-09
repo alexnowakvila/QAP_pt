@@ -38,8 +38,9 @@ def compute_accuracy(pred, labels):
     l = torch.sort(labels, 2)[0]
     # print('pred', p)
     # print('labels', l)
-    error = 1 - torch.eq(p, l).min(2)[0].type(dtype).squeeze(2)
-    frob_norm = error.mean(1).squeeze(1)
+    # print(torch.eq(p, l).min(2)[0].type(dtype).size())
+    error = 1 - torch.eq(p, l).min(2)[0].type(dtype)
+    frob_norm = error.mean(1)
     accuracy = 1 - frob_norm
     accuracy = accuracy.mean(0).squeeze()
     return accuracy.data.cpu().numpy()[0]
@@ -47,7 +48,7 @@ def compute_accuracy(pred, labels):
 def compute_mean_cost(pred, W):
     # cost estimator for training time
     pred = F.softmax(pred)
-    mean_rowcost = torch.mul(pred, W).mean(2).squeeze(2)
+    mean_rowcost = torch.mul(pred, W).mean(2)
     mean_pathcost = mean_rowcost.sum(1)
     return mean_pathcost.mean(0).squeeze().data.cpu().numpy()
 

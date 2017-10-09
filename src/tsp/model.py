@@ -51,7 +51,7 @@ def gmul(input):
     return output
 
 def normalize_embeddings(emb):
-    norm = torch.mul(emb, emb).sum(2).sqrt().expand_as(emb)
+    norm = torch.mul(emb, emb).sum(2).unsqueeze(2).sqrt().expand_as(emb)
     return emb.div(norm)
 
 class Gconv_last(nn.Module):

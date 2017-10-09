@@ -80,7 +80,7 @@ class Logger(object):
     def plot_example(self, Paths, costs, oracle_costs, Perms,
                      Cities, num_plots=1):
         num_plots = min(num_plots, Paths.size(0))
-        num_plots = 32
+        num_plots = 1
         for fig in range(num_plots):
             cost = costs[fig]
             oracle_cost = oracle_costs[fig]
