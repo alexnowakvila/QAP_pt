@@ -192,7 +192,10 @@ class Generator(object):
         else:
             datatset = self.data_test
         for b in range(num_samples):
-            ind = np.random.randint(0, len(dataset))
+            if is_training:
+                ind = np.random.randint(0, len(dataset))
+            else:
+                ind = b
             ww = torch.from_numpy(dataset[ind]['WW'])
             x = torch.from_numpy(dataset[ind]['x'])
             WW[b] = ww
