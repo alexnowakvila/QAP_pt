@@ -23,11 +23,11 @@ else:
 
 def compute_recovery_rate(pred, labels):
     pred = pred.max(2)[1]
-    error = 1 - torch.eq(pred, labels).type(dtype).squeeze(2)
-    frob_norm = error.mean(1).squeeze(1)
+    error = 1 - torch.eq(pred, labels).type(dtype)#.squeeze(2)
+    frob_norm = error.mean(1)#.squeeze(1)
     accuracy = 1 - frob_norm
     accuracy = accuracy.mean(0).squeeze()
-    return accuracy.data.cpu().numpy()[0]
+    return accuracy.data.cpu().numpy()#[0]
 
 class Logger(object):
     def __init__(self, path_logger):
@@ -64,6 +64,19 @@ class Logger(object):
         path = os.path.join(save_dir, 'gnn.pt')
         torch.save(model, path)
         print('Model Saved.')
+
+    def load_model(self):                                                 
+        load_dir = os.path.join(self.path, 'parameters/')
+        # check if any training has been done before.
+        try:
+            os.stat(load_dir)
+        except:
+            print("Training has not been done before testing. This session will be terminated.")
+            sys.exit()
+        path = os.path.join(load_dir, 'gnn.pt')
+        print('Loading the most recent model...')
+        siamese_gnn = torch.load(path)
+        return siamese_gnn
 
     def add_train_loss(self, loss):
         self.loss_train.append(loss.data.cpu().numpy())

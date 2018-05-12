@@ -105,10 +105,10 @@ def train(siamese_gnn, logger, gen):
         if it % logger.args['print_freq'] == 0:
             logger.plot_train_accuracy()
             logger.plot_train_loss()
-            loss = loss.data.cpu().numpy()[0]
+            loss = loss.data.cpu().numpy()#[0]
             info = ['iteration', 'loss', 'accuracy', 'edge_density',
                     'noise', 'model', 'elapsed']
-            out = [it, loss, logger.accuracy_train[-1], args.edge_density,
+            out = [it, loss.item(), logger.accuracy_train[-1].item(), args.edge_density,
                    args.noise, args.generative_model, elapsed]
             print(template1.format(*info))
             print(template2.format(*out))
