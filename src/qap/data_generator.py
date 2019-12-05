@@ -155,12 +155,12 @@ class Generator(object):
         path = os.path.join(self.path_dataset, filename)
         if os.path.exists(path):
             print('Reading training dataset at {}'.format(path))
-            self.data_train = np.load(open(path, 'rb'))
+            self.data_train = np.load(open(path, 'rb'), allow_pickle=True)
         else:
             print('Creating training dataset.')
             self.create_dataset_train()
             print('Saving training datatset at {}'.format(path))
-            np.save(open(path, 'wb'), self.data_train)
+            np.save(open(path, 'wb'), self.data_train, allow_pickle=True)
         # load test dataset
         if self.random_noise:
             filename = 'QAPtest_RN.np'
